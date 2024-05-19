@@ -36,6 +36,7 @@ var (
 	routesFlag       routes
 	sslCertificate   = os.Getenv(sslCertificateEnvVarName)
 	sslKey           = os.Getenv(sslKeyEnvVarName)
+	simpleFlag       bool
 )
 
 func init() {
@@ -58,6 +59,7 @@ func init() {
 	flag.Var(&routesFlag, "r", "(alias for -route)")
 	flag.StringVar(&sslCertificate, "ssl-cert", sslCertificate, fmt.Sprintf("path to SSL server certificate (environment variable %q)", sslCertificateEnvVarName))
 	flag.StringVar(&sslKey, "ssl-key", sslKey, fmt.Sprintf("path to SSL private key (environment variable %q)", sslKeyEnvVarName))
+	flag.BoolVar(&simpleFlag, "simple", simpleFlag, "use simple display format")
 	flag.Parse()
 	if quietFlag {
 		log.SetOutput(ioutil.Discard)
@@ -76,7 +78,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("address/port: %v", err)
 	}
-	err = server(addr, routesFlag)
+	if simpleFlag {
+		err = http.ListenAndServe(addr, http.FileServer(http.Dir(routesFlag.Values[0].Path)))
+	} else {
+		err = server(addr, routesFlag)
+	}
 	if err != nil {
 		log.Fatalf("start server: %v", err)
 	}
