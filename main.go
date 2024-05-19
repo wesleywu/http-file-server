@@ -10,13 +10,15 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"github.com/wesleywu/http-file-server/handler"
 )
 
 const (
 	addrEnvVarName           = "ADDR"
 	allowUploadsEnvVarName   = "UPLOADS"
 	allowDeletesEnvVarName   = "DELETES"
-	defaultAddr              = ":8080"
+	defaultAddr              = ":8280"
 	portEnvVarName           = "PORT"
 	quietEnvVarName          = "QUIET"
 	rootRoute                = "/"
@@ -104,12 +106,14 @@ func server(addr string, routes routes) error {
 		log.Printf("serving local path %q on %q", path, route)
 	}
 
-	_, rootRouteTaken := handlers[rootRoute]
-	if !rootRouteTaken {
-		route := routes.Values[0].Route
-		mux.Handle(rootRoute, http.RedirectHandler(route, http.StatusTemporaryRedirect))
-		log.Printf("redirecting to %q from %q", route, rootRoute)
-	}
+	mux.Handle("/static/*", &handler.EmbeddedHandler{})
+
+	//_, rootRouteTaken := handlers[rootRoute]
+	//if !rootRouteTaken {
+	//	route := routes.Values[0].Route
+	//	mux.Handle(rootRoute, http.RedirectHandler(route, http.StatusTemporaryRedirect))
+	//	log.Printf("redirecting to %q from %q", route, rootRoute)
+	//}
 
 	binaryPath, _ := os.Executable()
 	if binaryPath == "" {

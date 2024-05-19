@@ -30,36 +30,50 @@ const (
 const directoryListingTemplateText = `
 <html>
 <head>
-	<title>{{ .Title }}</title>
+	<title>Index of {{ .Title }}</title>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<style>body{font-family: sans-serif;}td{padding:.5em;}a{display:block;}tbody tr:nth-child(odd){background:#eee;}.number{text-align:right}.text{text-align:left;word-break:break-all;}canvas,table{width:100%;max-width:100%;}</style>
+	<link rel="stylesheet" href="/static/layout/autoindex.css" type="text/css">
 </head>
 <body>
-<h1>{{ .Title }}</h1>
+<h1>Index of {{ .Title }}</h1>
 {{ if or .Files .AllowUpload }}
 <table>
 	<thead>
-		<th></th>
-		<th colspan=2 class=number>Size (bytes)</th>
+		<th class="indexcolicon">
+			<img src="/static/icons/blank.png" alt="[ICO]">
+		</th>
+		<th class="indexcolname">
+			<a href="?C=N;O=D">Name</a>
+		</th>
+		<th class="indexcollastmod">
+			<a href="?C=M;O=A">Last modified</a>
+		</th>
+		<th class="indexcolsize">
+			<a href="?C=S;O=A">Size</a>
+		</th>   
 	</thead>
 	<tbody>
-	{{- if .Files }}
-	<tr><td colspan=3><a href="{{ .TarGzURL }}">.tar.gz of all files</a></td></tr>
-	<tr><td colspan=3><a href="{{ .ZipURL }}">.zip of all files</a></td></tr>
+	{{- if .ParentDir }}
+		<tr class="even">
+			<td class="indexcolicon"><a href="/"><img src="/static/icons/go-previous.png" alt="[PARENTDIR]"></a></td>
+			<td class="indexcolname"><a href="{{ .ParentDir.String }}">Parent Directory</a></td><td class="indexcollastmod">&nbsp;</td>
+			<td class="indexcolsize">  - </td>
+		</tr>
 	{{- end }}
 	{{- range .Files }}
-	<tr>
-		{{ if (not .IsDir) }}
-		<td class=text><a href="{{ .URL.String }}">{{ .Name }}</td>
-		<td class=number>{{.Size.String }}</td>
-		<td class=number>({{ .Size | printf "%d" }})</td>
-		{{ else }}
-		<td colspan=3 class=text><a href="{{ .URL.String }}">{{ .Name }}</td>
-		{{ end }}
-	</tr>
-	{{- end }}
-	{{- if .AllowUpload }}
-	<tr><td colspan=3><form method="post" enctype="multipart/form-data"><input required name="file" type="file"/><input value="Upload" type="submit"/></form></td></tr>
+		<tr>
+			{{ if (not .IsDir) }}
+ 				<td class="indexcolicon"><a href="{{ .URL.String }}"><img src="/static/icons/package-x-generic.png" alt="[ARC]"></a></td>
+				<td class="indexcolname"><a href="{{ .URL.String }}">{{ .Name }}</a></td>
+				<td class="indexcollastmod">{{ .LastModified }}</td>
+				<td class="indexcolsize">{{ .Size | printf "%d" }}</td>
+			{{ else }}
+				<td class="indexcolicon"><a href="{{ .URL.String }}"><img src="/static/icons/folder.png" alt="[DIR]"></a></td>
+				<td class="indexcolname"><a href="{{ .URL.String }}">{{ .Name }}</a></td>
+				<td class="indexcollastmod">{{ .LastModified }}</td>
+				<td class="indexcolsize">  - </td>
+			{{ end }}
+		</tr>
 	{{- end }}
 	</tbody>
 </table>
@@ -94,10 +108,11 @@ func (f fileSizeBytes) String() string {
 }
 
 type directoryListingFileData struct {
-	Name  string
-	Size  fileSizeBytes
-	IsDir bool
-	URL   *url.URL
+	Name         string
+	Size         fileSizeBytes
+	IsDir        bool
+	URL          *url.URL
+	LastModified string
 }
 
 type directoryListingData struct {
@@ -106,6 +121,7 @@ type directoryListingData struct {
 	TarGzURL    *url.URL
 	Files       []directoryListingFileData
 	AllowUpload bool
+	ParentDir   *url.URL
 }
 
 type fileHandler struct {
@@ -155,6 +171,22 @@ func (f *fileHandler) serveDir(w http.ResponseWriter, r *http.Request, osPath st
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	return directoryListingTemplate.Execute(w, directoryListingData{
 		AllowUpload: f.allowUpload,
+		ParentDir: func() *url.URL {
+			urlStr := r.URL.String()
+			if strings.HasSuffix(urlStr, "/") {
+				urlStr = urlStr[0 : len(urlStr)-1]
+			}
+			lastSlashPos := strings.LastIndex(urlStr, "/")
+			if lastSlashPos > 1 {
+				parentUrlStr := urlStr[0:lastSlashPos]
+				parentUrl, err := url.Parse(parentUrlStr)
+				if err != nil {
+					return nil
+				}
+				return parentUrl
+			}
+			return nil
+		}(),
 		Title: func() string {
 			relPath, _ := filepath.Rel(f.path, osPath)
 			return filepath.Join(filepath.Base(f.path), relPath)
@@ -180,9 +212,10 @@ func (f *fileHandler) serveDir(w http.ResponseWriter, r *http.Request, osPath st
 					name += osPathSeparator
 				}
 				fileData := directoryListingFileData{
-					Name:  name,
-					IsDir: d.IsDir(),
-					Size:  fileSizeBytes(d.Size()),
+					Name:         name,
+					IsDir:        d.IsDir(),
+					Size:         fileSizeBytes(d.Size()),
+					LastModified: d.ModTime().Format("2006-01-02 15:04:05"),
 					URL: func() *url.URL {
 						url := *r.URL
 						url.Path = path.Join(url.Path, name)

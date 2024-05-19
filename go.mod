@@ -1,3 +1,3 @@
-module github.com/sgreben/http-file-server
+module github.com/wesleywu/http-file-server
 
-go 1.16
+go 1.22
